@@ -1,0 +1,95 @@
+openapi: 3.1.0
+info:
+  title: OSIRIS GPT Backend
+  description: AI-Powered Agricultural Intelligence API for ChatGPT Integration
+  version: 1.0.0
+servers:
+  - url: https://osiris-gpt-backend.onrender.com
+    description: Production server on Render
+paths:
+  /api/think:
+    post:
+      operationId: osirisThink
+      summary: Main reasoning endpoint
+      description: Send a query to OSIRIS for AI-powered analysis
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - query
+              properties:
+                query:
+                  type: string
+                  description: The question or request to process
+                context:
+                  type: object
+                  description: Additional context for the query
+                language:
+                  type: string
+                  enum: [ar, en]
+                  default: ar
+                  description: Response language
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  response:
+                    type: string
+                  timestamp:
+                    type: string
+                  model:
+                    type: string
+  /api/tool:
+    post:
+      operationId: osirisExecuteTool
+      summary: Execute a specific tool
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - tool_name
+                - parameters
+              properties:
+                tool_name:
+                  type: string
+                  description: Name of the tool to execute
+                parameters:
+                  type: object
+                  description: Tool parameters
+      responses:
+        "200":
+          description: Tool execution result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  result:
+                    type: object
+                  tool_name:
+                    type: string
+  /api/tools:
+    get:
+      operationId: osirisListTools
+      summary: List available tools
+      responses:
+        "200":
+          description: List of tool names
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
