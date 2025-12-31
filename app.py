@@ -228,7 +228,7 @@ async def think(request: ThinkRequest, _: bool = Depends(verify_token)):
         full_prompt = f"{OSIRIS_DIRECTIVE}\n\n{memory_context}\n\nQuery: {request.query}\nContext: {request.context}\n"
         
         # 3. Generate
-        # Using Gemini 3.0 Pro (Sovereign Request)
+        # Using 2.0 Flash Thinking as per availability
         response = genai_client.models.generate_content(
             model="gemini-3.0-pro",
             contents=full_prompt,
@@ -244,7 +244,7 @@ async def think(request: ThinkRequest, _: bool = Depends(verify_token)):
 
         # 4. Log
         if memory_manager:
-            memory_manager.save_interaction(request.query, text_response, "gemini-2.0-flash-thinking")
+            memory_manager.save_interaction(request.query, text_response, "Gemini 3.0 Pro")
 
         return ThinkResponse(
             response=text_response,
