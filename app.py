@@ -9,6 +9,7 @@ from fastapi import FastAPI, HTTPException, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import google.generativeai as genai
+from supabase import create_client, Client
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -18,7 +19,7 @@ logger = logging.getLogger("OSIRIS_GPT_BACKEND")
 app = FastAPI(
     title="OSIRIS GPT Backend",
     description="AI-Powered Agricultural Intelligence API",
-    version="1.0.0"
+    version="1.1.0"
 )
 
 # CORS for ChatGPT
@@ -33,10 +34,21 @@ app.add_middleware(
 # Configuration
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 OSIRIS_TOKEN = os.environ.get("OSIRIS_TOKEN", "osiris-secret-token")
+SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
+SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
 
 # Initialize Gemini
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
+
+# Initialize Supabase
+supabase: Optional[Client] = None
+if SUPABASE_URL and SUPABASE_KEY:
+    try:
+        supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+        logger.info("Supabase client initialized successfully")
+    except Exception as e:
+        logger.error(f"Failed to initialize Supabase: {e}")
 
 # System Directive
 OSIRIS_DIRECTIVE = """
@@ -75,6 +87,14 @@ class ToolResponse(BaseModel):
     tool_name: str
     execution_time_ms: int
 
+class DBQueryRequest(BaseModel):
+    query: str
+
+class DBResponse(BaseModel):
+    data: List[Dict[str, Any]]
+    count: Optional[int] = None
+    error: Optional[str] = None
+
 # Auth dependency
 async def verify_token(authorization: str = Header(None)):
     if not authorization:
@@ -91,7 +111,7 @@ async def root():
     return HealthResponse(
         status="OSIRIS ONLINE",
         timestamp=datetime.now(timezone.utc).isoformat(),
-        version="1.0.0"
+        version="1.1.0"
     )
 
 @app.get("/health", response_model=HealthResponse)
@@ -100,7 +120,7 @@ async def health():
     return HealthResponse(
         status="healthy",
         timestamp=datetime.now(timezone.utc).isoformat(),
-        version="1.0.0"
+        version="1.1.0"
     )
 
 @app.post("/api/think", response_model=ThinkResponse)
@@ -141,6 +161,39 @@ async def think(request: ThinkRequest, _: bool = Depends(verify_token)):
         logger.error(f"Think error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/api/db/query", response_model=DBResponse)
+async def db_query(request: DBQueryRequest, _: bool = Depends(verify_token)):
+    """Execute a raw SQL query on Supabase (Use with CAUTION)"""
+    if not supabase:
+        raise HTTPException(status_code=503, detail="Supabase not configured")
+    
+    try:
+        # Assuming an RPC function 'execute_sql' exists or we just rely on client capabilities
+        # For security, one should use RPC. We will try a hypothetical 'execute_sql' RPC 
+        # or fallback to returning error if not set up, as direct raw SQL client-side is limited by RLS usually.
+        # But `supabase-py` client with service role key can theoretically do anything.
+        # Here we assume standard key.
+        response = supabase.rpc('execute_sql', {'query_text': request.query}).execute()
+        return DBResponse(data=response.data)
+    except Exception as e:
+        return DBResponse(data=[], error=str(e))
+
+@app.get("/api/db/tables", response_model=List[str])
+async def list_tables(_: bool = Depends(verify_token)):
+    """List all public tables in Supabase"""
+    if not supabase:
+        raise HTTPException(status_code=503, detail="Supabase not configured")
+    try:
+        # Try RPC 'list_tables' first
+        try:
+             response = supabase.rpc('list_tables').execute()
+             return [row['table_name'] for row in response.data] if response.data else []
+        except:
+             # Fallback: maybe just return a static list or error if RPC not def
+             return ["error: rpc_list_tables_missing"]
+    except Exception as e:
+        return [f"error: {str(e)}"]
+
 @app.post("/api/tool", response_model=ToolResponse)
 async def execute_tool(request: ToolRequest, _: bool = Depends(verify_token)):
     """Execute a specific tool"""
@@ -152,6 +205,7 @@ async def execute_tool(request: ToolRequest, _: bool = Depends(verify_token)):
         "echo": lambda p: p.get("message", ""),
         "calculate": lambda p: eval(p.get("expression", "0")),
         "datetime": lambda p: datetime.now(timezone.utc).isoformat(),
+        "db_select": lambda p: supabase.table(p.get("table")).select(p.get("columns", "*")).execute().data if supabase else "Supabase not connected"
     }
     
     if request.tool_name not in tools:
@@ -173,9 +227,12 @@ async def execute_tool(request: ToolRequest, _: bool = Depends(verify_token)):
 @app.get("/api/tools", response_model=List[str])
 async def list_tools():
     """List available tools"""
-    return ["echo", "calculate", "datetime"]
+    tools = ["echo", "calculate", "datetime"]
+    if supabase:
+        tools.append("db_select")
+    return tools
 
-# For local development
+# for Hugging Face Spaces
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=7860)

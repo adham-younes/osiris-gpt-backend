@@ -3,3 +3,4 @@ uvicorn[standard]==0.34.0
 pydantic==2.10.4
 google-generativeai==0.8.4
 python-multipart==0.0.20
+supabase==2.3.0
