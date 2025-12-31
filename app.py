@@ -231,9 +231,9 @@ async def think(request: ThinkRequest, _: bool = Depends(verify_token)):
         full_prompt = f"{OSIRIS_DIRECTIVE}\n\n{memory_context}\n\nQuery: {request.query}\nContext: {request.context}\n"
         
         # 3. Generate
-        # Using 2.0 Flash Thinking as per availability
+        # Using 2.0 Flash (Latest Experimental)
         response = genai_client.models.generate_content(
-            model="gemini-2.0-flash-thinking-exp-1219",
+            model="gemini-2.0-flash-exp",
             contents=full_prompt,
             config=types.GenerateContentConfig(
                 tools=[types.Tool(google_search=types.GoogleSearch())],
