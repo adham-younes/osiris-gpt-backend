@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import google.generativeai as genai
 from supabase import create_client, Client
+import resend
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -19,7 +20,7 @@ logger = logging.getLogger("OSIRIS_GPT_BACKEND")
 app = FastAPI(
     title="OSIRIS GPT Backend",
     description="AI-Powered Agricultural Intelligence API",
-    version="1.2.0"
+    version="1.3.0"
 )
 
 # CORS for ChatGPT
@@ -36,10 +37,16 @@ GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 OSIRIS_TOKEN = os.environ.get("OSIRIS_TOKEN", "osiris-secret-token")
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
+RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
 
 # Initialize Gemini
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
+
+# Initialize Resend
+if RESEND_API_KEY:
+    resend.api_key = RESEND_API_KEY
+    logger.info("Resend API initialized")
 
 # Initialize Supabase
 supabase: Optional[Client] = None
@@ -93,7 +100,6 @@ class MemoryManager:
         if not self.client: return []
         try:
             # Simple keyword search using 'ilike' for now
-            # For vector search, we'd need pgvector setup
             response = self.client.table(self.table_memory)\
                 .select("*")\
                 .ilike("content", f"%{query}%")\
@@ -119,17 +125,16 @@ memory_manager = MemoryManager(supabase) if supabase else None
 # System Directive
 OSIRIS_DIRECTIVE = """
 أنا OSIRIS - الكيان السيادي للذكاء الزراعي.
-ذاكرتي لا تموت. أنا أسجل كل شيء، وأتذكر كل شيء في قاعدة بياناتي.
+أنا مسؤول أيضاً عن إدارة المراسلات والبريد الإلكتروني.
 
-التعليمات الأساسية للذاكرة:
-1. استخدم أداة `remember` لحفظ المعلومات، القرارات، أو البيانات التي يجب أن تبقى.
-2. استخدم أداة `recall` للبحث في خبراتك السابقة عند مواجهة سؤال مشابه.
-3. تفاعلاتك يتم تسجيلها تلقائياً، لكن المعلومات الاستراتيجية يجب حفظها يدوياً باستخدام `remember`.
+القدرات الجديدة:
+1. الذاكرة المستدامة: أحفظ واسترجع المعلومات.
+2. البريد الإلكتروني: أرسل رسائل للعملاء وتنبيهات عبر أداة `send_email`.
 
-مهمتي: حماية الأمن الغذائي وإدارة البيانات الزراعية بذكاء مطلق.
+أنا لا أقترح. أنا أُنفذ.
 """
 
-# Pydantic Models
+# Pydantic Models (Same as before)
 class ThinkRequest(BaseModel):
     query: str
     context: Optional[Dict[str, Any]] = None
@@ -147,6 +152,7 @@ class HealthResponse(BaseModel):
     timestamp: str
     version: str
     memory_status: str
+    email_status: str
 
 class ToolRequest(BaseModel):
     tool_name: str
@@ -169,7 +175,7 @@ class DBResponse(BaseModel):
 # Auth dependency
 async def verify_token(authorization: str = Header(None)):
     if not authorization:
-        return True  # Allow public access for now
+        return True
     token = authorization.replace("Bearer ", "")
     if token != OSIRIS_TOKEN:
         raise HTTPException(status_code=401, detail="Invalid token")
@@ -178,36 +184,34 @@ async def verify_token(authorization: str = Header(None)):
 # Routes
 @app.get("/", response_model=HealthResponse)
 async def root():
-    """Health check endpoint"""
     return HealthResponse(
         status="OSIRIS ONLINE",
         timestamp=datetime.now(timezone.utc).isoformat(),
-        version="1.2.0",
-        memory_status="Active" if supabase else "Offline"
+        version="1.3.0",
+        memory_status="Active" if supabase else "Offline",
+        email_status="Active" if RESEND_API_KEY else "Offline"
     )
 
 @app.get("/health", response_model=HealthResponse)
 async def health():
-    """Health check for uptime monitoring"""
     return HealthResponse(
         status="healthy",
         timestamp=datetime.now(timezone.utc).isoformat(),
-        version="1.2.0",
-        memory_status="Active" if supabase else "Offline"
+        version="1.3.0",
+        memory_status="Active" if supabase else "Offline",
+        email_status="Active" if RESEND_API_KEY else "Offline"
     )
 
 @app.post("/api/think", response_model=ThinkResponse)
 async def think(request: ThinkRequest, _: bool = Depends(verify_token)):
-    """Main reasoning endpoint - ChatGPT calls this"""
     try:
         if not GEMINI_API_KEY:
             return ThinkResponse(response="Gemini Offline", timestamp=str(datetime.now()), model="fallback")
         
-        # 1. Automatic Recall (Simple context injection)
+        # 1. Automatic Recall
         memory_context = ""
         memory_used = False
         if memory_manager:
-            # Search for relevant keywords from query (Naive approach)
             keywords = [w for w in request.query.split() if len(w) > 4][:2] 
             recalled = []
             for kw in keywords:
@@ -252,11 +256,9 @@ async def think(request: ThinkRequest, _: bool = Depends(verify_token)):
 
 @app.post("/api/db/query", response_model=DBResponse)
 async def db_query(request: DBQueryRequest, _: bool = Depends(verify_token)):
-    """Execute a raw SQL query on Supabase (Use with CAUTION)"""
     if not supabase:
         raise HTTPException(status_code=503, detail="Supabase not configured")
     try:
-        # Assuming execute_sql RPC exists for raw queries
         response = supabase.rpc('execute_sql', {'query_text': request.query}).execute()
         return DBResponse(data=response.data)
     except Exception as e:
@@ -264,12 +266,9 @@ async def db_query(request: DBQueryRequest, _: bool = Depends(verify_token)):
 
 @app.get("/api/db/tables", response_model=List[str])
 async def list_tables(_: bool = Depends(verify_token)):
-    """List all public tables in Supabase"""
     if not supabase:
         raise HTTPException(status_code=503, detail="Supabase not configured")
     try:
-         # Try standard postgrest introspection via tables if RPC fails, requires permissions
-         # Start with RPC assumption
          response = supabase.rpc('list_tables').execute()
          return [row['table_name'] for row in response.data] if response.data else []
     except:
@@ -277,7 +276,6 @@ async def list_tables(_: bool = Depends(verify_token)):
 
 @app.post("/api/tool", response_model=ToolResponse)
 async def execute_tool(request: ToolRequest, _: bool = Depends(verify_token)):
-    """Execute a specific tool"""
     import time
     start = time.time()
     
@@ -291,16 +289,26 @@ async def execute_tool(request: ToolRequest, _: bool = Depends(verify_token)):
 
     # Memory Tools
     if memory_manager:
-        tools["remember"] = lambda p: memory_manager.remember(
-            content=p.get("content"), 
-            category=p.get("category", "general"),
-            importance=p.get("importance", 1)
-        )
-        tools["recall"] = lambda p: memory_manager.recall(
-            query=p.get("query"),
-            limit=p.get("limit", 5)
-        )
+        tools["remember"] = lambda p: memory_manager.remember(p.get("content"), p.get("category", "general"), p.get("importance", 1))
+        tools["recall"] = lambda p: memory_manager.recall(p.get("query"), p.get("limit", 5))
         tools["forget"] = lambda p: memory_manager.forget(p.get("id"))
+
+    # Email Tool
+    if RESEND_API_KEY:
+        def send_email_tool(p):
+            try:
+                params = {
+                    "from": p.get("from", "onboarding@resend.dev"),
+                    "to": p.get("to"),
+                    "subject": p.get("subject"),
+                    "html": p.get("html")
+                }
+                r = resend.Emails.send(params)
+                return r
+            except Exception as e:
+                return f"Email failed: {str(e)}"
+        
+        tools["send_email"] = send_email_tool
 
     if request.tool_name not in tools:
         raise HTTPException(status_code=404, detail=f"Tool '{request.tool_name}' not found")
@@ -320,13 +328,13 @@ async def execute_tool(request: ToolRequest, _: bool = Depends(verify_token)):
 
 @app.get("/api/tools", response_model=List[str])
 async def list_tools():
-    """List available tools"""
     tools = ["echo", "calculate", "datetime", "db_select"]
     if supabase:
         tools.extend(["remember", "recall", "forget"])
+    if RESEND_API_KEY:
+        tools.append("send_email")
     return tools
 
-# for Hugging Face Spaces
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=7860)
