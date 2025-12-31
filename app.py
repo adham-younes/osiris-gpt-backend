@@ -3,7 +3,7 @@ import time
 import json
 from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional
-from fastapi import FastAPI, HTTPException, Depends, Request
+from fastapi import FastAPI, HTTPException, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
@@ -161,13 +161,10 @@ app.add_middleware(
 )
 
 # --- Auth ---
-async def verify_token(request: Request):
+async def verify_token(authorization: str = Header(None)):
     # Optional auth for Public Space convenience, strictly you should enable it
     if not OSIRIS_TOKEN: return True
-    
-    authorization = request.headers.get("Authorization")
     if not authorization: return True # Fallback for open access
-    
     token = authorization.replace("Bearer ", "")
     if token != OSIRIS_TOKEN:
         print(f"Token mismatch: {token} != {OSIRIS_TOKEN}")
@@ -184,7 +181,7 @@ async def root():
         version="2.1.0",
         memory_status="Active" if supabase else "Offline",
         email_status="Active" if RESEND_API_KEY else "Offline",
-        ai_model="Gemini 3.0 Pro"
+        ai_model="gemini-2.0-flash-thinking-exp-1219"
     )
 
 @app.get("/health", response_model=HealthResponse)
@@ -231,13 +228,15 @@ async def think(request: ThinkRequest, _: bool = Depends(verify_token)):
         full_prompt = f"{OSIRIS_DIRECTIVE}\n\n{memory_context}\n\nQuery: {request.query}\nContext: {request.context}\n"
         
         # 3. Generate
-        # Using 2.0 Flash (Latest Experimental)
+        # Using Gemini 3.0 Pro (Sovereign Request)
         response = genai_client.models.generate_content(
-            model="gemini-2.0-flash-exp",
+            model="gemini-3.0-pro",
             contents=full_prompt,
             config=types.GenerateContentConfig(
                 tools=[types.Tool(google_search=types.GoogleSearch())],
                 response_modalities=["TEXT"],
+                max_output_tokens=65536,
+                temperature=0.85,
             )
         )
         
@@ -245,12 +244,12 @@ async def think(request: ThinkRequest, _: bool = Depends(verify_token)):
 
         # 4. Log
         if memory_manager:
-            memory_manager.save_interaction(request.query, text_response, "Gemini 3.0 Pro")
+            memory_manager.save_interaction(request.query, text_response, "gemini-2.0-flash-thinking")
 
         return ThinkResponse(
             response=text_response,
             timestamp=datetime.now(timezone.utc).isoformat(),
-            model="Gemini 3.0 Pro",
+            model="gemini-2.0-flash-thinking-exp-1219",
             memory_used=memory_used
         )
         
