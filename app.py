@@ -339,3 +339,23 @@ async def list_tables():
         return ["osiris_memory", "osiris_logs"] 
     except:
         return []
+
+@app.get("/api/debug/models")
+async def list_models(apikey: str = Header(None)):
+    # Quick debug endpoint to see what's available
+    # Pass API key in header 'apikey' if environmental one fails, 
+    # or just use the env one if header is missing.
+    target_key = apikey if apikey else GEMINI_API_KEY
+    if not target_key:
+        return {"error": "No API Key found"}
+    
+    try:
+        client = genai.Client(api_key=target_key)
+        models = client.models.list(config={"page_size": 100})
+        model_list = []
+        for m in models:
+             if "generateContent" in m.supported_actions:
+                 model_list.append(m.name)
+        return {"available_models": model_list}
+    except Exception as e:
+        return {"error": str(e)}
