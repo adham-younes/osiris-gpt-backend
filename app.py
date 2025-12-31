@@ -3,7 +3,7 @@ import time
 import json
 from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional
-from fastapi import FastAPI, HTTPException, Depends, Header
+from fastapi import FastAPI, HTTPException, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
@@ -161,10 +161,13 @@ app.add_middleware(
 )
 
 # --- Auth ---
-async def verify_token(authorization: str = Header(None)):
+async def verify_token(request: Request):
     # Optional auth for Public Space convenience, strictly you should enable it
     if not OSIRIS_TOKEN: return True
+    
+    authorization = request.headers.get("Authorization")
     if not authorization: return True # Fallback for open access
+    
     token = authorization.replace("Bearer ", "")
     if token != OSIRIS_TOKEN:
         print(f"Token mismatch: {token} != {OSIRIS_TOKEN}")
