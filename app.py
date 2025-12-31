@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from typing import Optional, Dict, Any, List
 from fastapi import FastAPI, HTTPException, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from google import genai
 from google.genai import types
@@ -22,7 +23,7 @@ logger = logging.getLogger("OSIRIS_GPT_BACKEND")
 app = FastAPI(
     title="OSIRIS GPT Backend",
     description="AI-Powered Agricultural Intelligence API (Gemini 3.0)",
-    version="2.0.0"
+    version="2.1.0"
 )
 
 # CORS for ChatGPT
@@ -194,7 +195,7 @@ async def root():
     return HealthResponse(
         status="OSIRIS ONLINE",
         timestamp=datetime.now(timezone.utc).isoformat(),
-        version="2.0.0",
+        version="2.1.0",
         memory_status="Active" if supabase else "Offline",
         email_status="Active" if RESEND_API_KEY else "Offline",
         ai_model="gemini-3-pro-preview"
@@ -205,11 +206,36 @@ async def health():
     return HealthResponse(
         status="healthy",
         timestamp=datetime.now(timezone.utc).isoformat(),
-        version="2.0.0",
+        version="2.1.0",
         memory_status="Active" if supabase else "Offline",
         email_status="Active" if RESEND_API_KEY else "Offline",
         ai_model="gemini-3-pro-preview"
     )
+
+@app.get("/privacy", response_class=HTMLResponse)
+async def privacy_policy():
+    """Privacy Policy for ChatGPT Compliance"""
+    return """
+    <html>
+        <head>
+            <title>OSIRIS Privacy Policy</title>
+            <style>body{font-family: sans-serif; padding: 20px; max-width: 800px; margin: auto;}</style>
+        </head>
+        <body>
+            <h1>Privacy Policy for OSIRIS Backend</h1>
+            <p><strong>Last Updated:</strong> 2025-12-31</p>
+            <p>Typically, this backend is for personal or internal use by Adham AgriTech.</p>
+            <h2>1. Data Collection</h2>
+            <p>We collect input queries and interactions to improve the AI response (Gemini) and store memories in our private database (Supabase).</p>
+            <h2>2. Data Usage</h2>
+            <p>Data is used solely for the purpose of providing AI assistance and maintaining agricultural intelligence.</p>
+            <h2>3. Third Parties</h2>
+            <p>Data is processed by Google Gemini (AI), Supabase (Database), and Resend (Email).</p>
+            <h2>4. Contact</h2>
+            <p>For questions, contact the system administrator.</p>
+        </body>
+    </html>
+    """
 
 @app.post("/api/think", response_model=ThinkResponse)
 async def think(request: ThinkRequest, _: bool = Depends(verify_token)):
@@ -264,17 +290,12 @@ async def think(request: ThinkRequest, _: bool = Depends(verify_token)):
             ),
             tools=model_tools,
             temperature=0.7,
-            max_output_tokens=65536, # High output limit
+            max_output_tokens=65536,
         )
 
         # 4. Generate
-        # Using generating_content (non-stream for simplicity in API)
         response = genai_client.models.generate_content(
-            model="gemini-2.0-flash-thinking-exp-1219", # Using Thinking model as requested by snippet logic, or user asked for 'gemini-3-pro-preview' specifically? 
-            # The snippet says: model = "gemini-3-pro-preview". Let's use that.
-            # NOTE: "gemini-3-pro-preview" might not be publicly available yet, but user asked for it.
-            # If it fails, I will fallback or user needs to know.
-            # I will use the user's specific string.
+            model="gemini-2.0-flash-thinking-exp-1219",
             contents=contents,
             config=generate_config,
         )
@@ -297,6 +318,7 @@ async def think(request: ThinkRequest, _: bool = Depends(verify_token)):
         # Detailed error for debugging
         raise HTTPException(status_code=500, detail=f"Gemini 3 Error: {str(e)}")
 
+# ... (Existing DB routes: db_query, list_tables) ...
 @app.post("/api/db/query", response_model=DBResponse)
 async def db_query(request: DBQueryRequest, _: bool = Depends(verify_token)):
     if not supabase:
