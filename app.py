@@ -228,7 +228,7 @@ async def think(request: ThinkRequest, _: bool = Depends(verify_token)):
         full_prompt = f"{OSIRIS_DIRECTIVE}\n\n{memory_context}\n\nQuery: {request.query}\nContext: {request.context}\n"
         
         # 3. Generate
-        # Using 2.0 Flash Thinking as per availability
+        # Using Gemini 3.0 Pro (Sovereign Request)
         response = genai_client.models.generate_content(
             model="gemini-3.0-pro",
             contents=full_prompt,
