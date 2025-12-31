@@ -181,7 +181,7 @@ async def root():
         version="2.1.0",
         memory_status="Active" if supabase else "Offline",
         email_status="Active" if RESEND_API_KEY else "Offline",
-        ai_model="gemini-2.0-flash-thinking-exp-1219"
+        ai_model="Gemini 3.0 Pro"
     )
 
 @app.get("/health", response_model=HealthResponse)
@@ -249,7 +249,7 @@ async def think(request: ThinkRequest, _: bool = Depends(verify_token)):
         return ThinkResponse(
             response=text_response,
             timestamp=datetime.now(timezone.utc).isoformat(),
-            model="gemini-2.0-flash-thinking-exp-1219",
+            model="Gemini 3.0 Pro",
             memory_used=memory_used
         )
         
