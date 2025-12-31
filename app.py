@@ -119,7 +119,7 @@ class ThinkResponse(BaseModel):
 
 class ToolRequest(BaseModel):
     tool_name: str
-    parameters: Dict[str, Any]
+    parameters: Dict[str, Any] = {}
 
 class ToolResponse(BaseModel):
     success: bool
@@ -228,9 +228,9 @@ async def think(request: ThinkRequest, _: bool = Depends(verify_token)):
         full_prompt = f"{OSIRIS_DIRECTIVE}\n\n{memory_context}\n\nQuery: {request.query}\nContext: {request.context}\n"
         
         # 3. Generate
-        # Using Gemini 3.0 Pro (Sovereign Request)
+        # Using Gemini 3.0 Pro Preview (Sovereign Request - Corrected ID)
         response = genai_client.models.generate_content(
-            model="gemini-3.0-pro",
+            model="gemini-3-pro-preview",
             contents=full_prompt,
             config=types.GenerateContentConfig(
                 tools=[types.Tool(google_search=types.GoogleSearch())],
