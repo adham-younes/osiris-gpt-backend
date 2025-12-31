@@ -2,10 +2,10 @@ openapi: 3.1.0
 info:
   title: OSIRIS GPT Backend
   description: AI-Powered Agricultural Intelligence API for ChatGPT Integration
-  version: 1.0.0
+  version: 1.1.0
 servers:
-  - url: https://osiris-gpt-backend.onrender.com
-    description: Production server on Render
+  - url: https://adham2025-osiris-backend.hf.space
+    description: Production server on Hugging Face Spaces
 paths:
   /api/think:
     post:
@@ -46,6 +46,50 @@ paths:
                     type: string
                   model:
                     type: string
+  /api/db/query:
+    post:
+      operationId: osirisDBQuery
+      summary: Execute raw SQL query
+      description: Execute SQL query on connected Supabase database
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - query
+              properties:
+                query:
+                  type: string
+                  description: SQL query to execute
+      responses:
+        "200":
+          description: Query results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                  error:
+                    type: string
+  /api/db/tables:
+    get:
+      operationId: osirisListTables
+      summary: List database tables
+      responses:
+        "200":
+          description: List of table names
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
   /api/tool:
     post:
       operationId: osirisExecuteTool
