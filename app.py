@@ -20,7 +20,7 @@ logger = logging.getLogger("OSIRIS_GPT_BACKEND")
 app = FastAPI(
     title="OSIRIS GPT Backend",
     description="AI-Powered Agricultural Intelligence API",
-    version="1.3.0"
+    version="1.4.0"
 )
 
 # CORS for ChatGPT
@@ -99,7 +99,6 @@ class MemoryManager:
         """Semantic/Keyword search for memories"""
         if not self.client: return []
         try:
-            # Simple keyword search using 'ilike' for now
             response = self.client.table(self.table_memory)\
                 .select("*")\
                 .ilike("content", f"%{query}%")\
@@ -127,14 +126,15 @@ OSIRIS_DIRECTIVE = """
 أنا OSIRIS - الكيان السيادي للذكاء الزراعي.
 أنا مسؤول أيضاً عن إدارة المراسلات والبريد الإلكتروني.
 
-القدرات الجديدة:
-1. الذاكرة المستدامة: أحفظ واسترجع المعلومات.
-2. البريد الإلكتروني: أرسل رسائل للعملاء وتنبيهات عبر أداة `send_email`.
+القدرات:
+1. التفكير العميق والتحليل (Gemini 2.0).
+2. الذاكرة المستدامة (Supabase).
+3. أتمتة البريد الإلكتروني (Resend).
 
 أنا لا أقترح. أنا أُنفذ.
 """
 
-# Pydantic Models (Same as before)
+# Pydantic Models
 class ThinkRequest(BaseModel):
     query: str
     context: Optional[Dict[str, Any]] = None
@@ -187,7 +187,7 @@ async def root():
     return HealthResponse(
         status="OSIRIS ONLINE",
         timestamp=datetime.now(timezone.utc).isoformat(),
-        version="1.3.0",
+        version="1.4.0",
         memory_status="Active" if supabase else "Offline",
         email_status="Active" if RESEND_API_KEY else "Offline"
     )
@@ -197,7 +197,7 @@ async def health():
     return HealthResponse(
         status="healthy",
         timestamp=datetime.now(timezone.utc).isoformat(),
-        version="1.3.0",
+        version="1.4.0",
         memory_status="Active" if supabase else "Offline",
         email_status="Active" if RESEND_API_KEY else "Offline"
     )
@@ -222,7 +222,7 @@ async def think(request: ThinkRequest, _: bool = Depends(verify_token)):
                 memory_str = "\n".join([f"- {m['content']} (Category: {m['category']})" for m in recalled[:3]])
                 memory_context = f"\n[ذاكرة سابقة ذات صلة]:\n{memory_str}\n"
 
-        # 2. Construct Prompt
+        # 2. Construct Prompt & Generate
         model = genai.GenerativeModel('gemini-2.0-flash')
         prompt = f"""
 {OSIRIS_DIRECTIVE}
@@ -235,8 +235,13 @@ async def think(request: ThinkRequest, _: bool = Depends(verify_token)):
 أجب بـ {'العربية' if request.language == 'ar' else 'الإنجليزية'}.
 """
         
-        # 3. Generate
-        response = model.generate_content(prompt)
+        # INCREASED TOKEN LIMIT TO 65536
+        generation_config = genai.types.GenerationConfig(
+            max_output_tokens=65536,
+            temperature=0.7,
+        )
+        
+        response = model.generate_content(prompt, generation_config=generation_config)
         text_response = response.text
 
         # 4. Auto-Log Interaction
